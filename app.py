@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dateutil.parser import parse
 import os
@@ -10,6 +11,15 @@ from typing import Optional
 load_dotenv()
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 API_KEY = os.environ["AIRTABLE_API_KEY"]
 BASE_ID = os.environ["AIRTABLE_BASE_ID"]

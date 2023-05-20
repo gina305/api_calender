@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dateutil.parser import parse
 import os
@@ -25,10 +25,14 @@ class ConflictResult(BaseModel):
     conflicting_appointments: list
     error: Optional[str] = None
 
-
 @app.get("/api/conflicting_appointments/{record_id}", response_model=ConflictResult)
 async def get_conflicting_appointments(record_id: str):
-    response = requests.get(AIRTABLE_API_URL, headers=headers)
+    try:
+        response = requests.get(AIRTABLE_API_URL, headers=headers)
+        response.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     appointments = response.json().get("records", [])
 
     print(appointments)
@@ -38,21 +42,22 @@ async def get_conflicting_appointments(record_id: str):
     today = datetime.datetime.now().date()
 
     for appointment in appointments:
-        Start = datetime.datetime.fromisoformat(appointment["fields"]["Start"][:-1] + "+00:00")
-        End = datetime.datetime.fromisoformat(appointment["fields"]["End"][:-1] + "+00:00")
+        try:
+            Start = datetime.datetime.fromisoformat(appointment["fields"]["Start"][:-1] + "+00:00")
+            End = datetime.datetime.fromisoformat(appointment["fields"]["End"][:-1] + "+00:00")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error parsing date: {str(e)}")
 
         if Start.date() < today:
             continue
 
         if appointment["id"] == record_id:
-            appointment_to_check = {"id": appointment["id"], "Start": Start, "End": End, "name": appointment["fields"]["Name"]}
-
+            appointment_to_check = {"id": appointment["id"], "Start": Start, "end": End, "name": appointment["fields"]["Name"]}
         else:
             other_appointments.append({"id": appointment["id"], "Start": Start, "End": End, "name": appointment["fields"]["Name"]})
 
     if not appointment_to_check:
         return {"is_conflict": False, "conflicting_appointments": [], "error": "Record not found or has a Start date in the past"}
-
 
     conflicting_appointments = []
 

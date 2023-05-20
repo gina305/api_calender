@@ -1,25 +1,13 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from flask import Flask, jsonify, request, abort
 from dateutil.parser import parse
 import os
 import requests
 import datetime
 from dotenv import load_dotenv
-from typing import Optional
 
 load_dotenv()
 
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+app = Flask(__name__)
 
 API_KEY = os.environ["AIRTABLE_API_KEY"]
 BASE_ID = os.environ["AIRTABLE_BASE_ID"]
@@ -30,33 +18,19 @@ headers = {
     "Authorization": f"Bearer {API_KEY}",
 }
 
-class ConflictResult(BaseModel):
-    is_conflict: bool
-    conflicting_appointments: list
-    error: Optional[str] = None
-
-@app.get("/api/conflicting_appointments/{record_id}", response_model=ConflictResult)
-async def get_conflicting_appointments(record_id: str):
-    try:
-        response = requests.get(AIRTABLE_API_URL, headers=headers)
-        response.raise_for_status()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
+@app.route("/api/conflicting_appointments/<record_id>", methods=['GET'])
+def get_conflicting_appointments(record_id: str):
+    response = requests.get(AIRTABLE_API_URL, headers=headers)
     appointments = response.json().get("records", [])
 
-    print(appointments)
     appointment_to_check = None
     other_appointments = []
 
     today = datetime.datetime.now().date()
 
     for appointment in appointments:
-        try:
-            Start = datetime.datetime.fromisoformat(appointment["fields"]["Start"][:-1] + "+00:00")
-            End = datetime.datetime.fromisoformat(appointment["fields"]["End"][:-1] + "+00:00")
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Error parsing date: {str(e)}")
+        Start = datetime.datetime.fromisoformat(appointment["fields"]["Start"][:-1] + "+00:00")
+        End = datetime.datetime.fromisoformat(appointment["fields"]["End"][:-1] + "+00:00")
 
         if Start.date() < today:
             continue
@@ -67,7 +41,7 @@ async def get_conflicting_appointments(record_id: str):
             other_appointments.append({"id": appointment["id"], "Start": Start, "End": End, "name": appointment["fields"]["Name"]})
 
     if not appointment_to_check:
-        return {"is_conflict": False, "conflicting_appointments": [], "error": "Record not found or has a Start date in the past"}
+        return jsonify(is_conflict=False, conflicting_appointments=[], error="Record not found or has a Start date in the past")
 
     conflicting_appointments = []
 
@@ -77,4 +51,7 @@ async def get_conflicting_appointments(record_id: str):
 
     has_conflict = len(conflicting_appointments) > 0
 
-    return {"is_conflict": has_conflict, "conflicting_appointments": conflicting_appointments}
+    return jsonify(is_conflict=has_conflict, conflicting_appointments=conflicting_appointments, error=None)
+
+if __name__ == "__main__":
+    app.run(debug=True)

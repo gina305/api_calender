@@ -1,0 +1,9 @@
+{
+    "builds": [
+      {
+        "src": "/api/conflicting_appointments.py",
+        "use": "@vercel/python"
+      }
+    ]
+  }
+  
